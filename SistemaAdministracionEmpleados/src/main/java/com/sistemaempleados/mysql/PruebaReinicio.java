@@ -1,23 +1,19 @@
-package com.sistemaempleados.mongo;
-
-import com.sistemaempleados.mongo.modelo.Empleado;
-import com.sistemaempleados.mongo.modelo.RegistroRemuneracion;
-import com.sistemaempleados.mongo.persistencia.EmpleadoDAO;
-import com.sistemaempleados.mongo.persistencia.MongoConexion;
-import com.sistemaempleados.mongo.persistencia.RemuneracionDAO;
+package com.sistemaempleados.mysql;
+import com.sistemaempleados.mysql.modelo.Empleado;
+import com.sistemaempleados.mysql.modelo.RegistroRemuneracion;
+import com.sistemaempleados.mysql.persistencia.EmpleadoDAO;
+import com.sistemaempleados.mysql.persistencia.MySqlConexion;
+import com.sistemaempleados.mysql.persistencia.RemuneracionDAO;
 
 import java.util.Map;
 
-/**
- * Prueba manual de persistencia tras reinicio:
- *   1) java ... PruebaReinicio guardar   -> guarda datos y termina
- *   2) java ... PruebaReinicio leer      -> en una NUEVA ejecución, lee lo guardado
- */
 public class PruebaReinicio {
 
+    private static final String MODO = "leer";
+
     public static void main(String[] args) {
-        if (!MongoConexion.probarConexion()) return;
-        String modo = args.length > 0 ? args[0] : "leer";
+        if (!MySqlConexion.probarConexion()) return;
+        String modo = args.length > 0 ? args[0] : MODO;
 
         EmpleadoDAO empDao = new EmpleadoDAO();
         RemuneracionDAO remDao = new RemuneracionDAO();
@@ -36,6 +32,5 @@ public class PruebaReinicio {
                 remDao.historialPorEmpleado(e.getId()).forEach(r -> System.out.println("   " + r));
             }
         }
-        MongoConexion.cerrar();
     }
 }
