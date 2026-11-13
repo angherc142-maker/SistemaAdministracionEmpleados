@@ -78,6 +78,10 @@ public abstract class Empleado {
     public void setActivo(boolean activo) {
         this.activo = activo;
     }
+    // agregado Pam inicio
+    // Calcular remuneración según el tipo de empleado
+public abstract double calcularRemuneracion();
+    // agregado pam fin
 
     // Mostrar información del empleado
     @Override
