@@ -19,4 +19,9 @@ public class EmpleadoPrueba extends Empleado {
 
         super(codigo, nombre, documento, cargo, fechaIngreso);
     }
+    // agregado pam 
+        @Override
+    public double calcularRemuneracion() {
+        return 0.0;
+    }
 }
