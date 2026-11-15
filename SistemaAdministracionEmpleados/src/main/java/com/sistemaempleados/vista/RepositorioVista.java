@@ -1,7 +1,9 @@
 package com.sistemaempleados.vista;
 
+import com.sistemaempleados.mysql.persistencia.EsquemaBD;
+import com.sistemaempleados.mysql.persistencia.MySqlConexion;
+import com.sistemaempleados.mysql.persistencia.PersistenciaException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -17,12 +19,7 @@ import java.util.Map;
  */
 public class RepositorioVista {
 
-    // Define las variables de entorno DB_USER y DB_PASS, o cambia los valores por defecto.
-    // No subas tu contraseña real al repositorio.
-    private static final String URL =
-            "jdbc:mysql://localhost:3306/remuneraciones_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-    private static final String USUARIO = System.getenv().getOrDefault("DB_USER", "root");
-    private static final String CLAVE = System.getenv().getOrDefault("DB_PASS", "MiNuevaClave123");// Agregar la clave a usar (clave de referencia)
+    // La conexión (usuario, contraseña y base de datos) se configura en MySqlConexion.
 
     public record EmpleadoVista(String cedula, String nombre, String cargo,
                                 double salarioBase, String tipo) {}
@@ -31,7 +28,12 @@ public class RepositorioVista {
                                     String periodo, String detalle, double importe) {}
 
     private static Connection conectar() throws SQLException {
-        return DriverManager.getConnection(URL, USUARIO, CLAVE);
+        try {
+            EsquemaBD.inicializar();
+        } catch (PersistenciaException ex) {
+            throw new SQLException(ex.getMessage(), ex);
+        }
+        return MySqlConexion.getConexion();
     }
 
     /** Deduce el tipo a partir de los conceptos del cálculo (solución temporal). */
