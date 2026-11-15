@@ -61,12 +61,8 @@ public class MenuPrincipalFrame extends JFrame {
         btnSalir.addActionListener(e -> salir());
     }
 
-    private void abrirGestionEmpleados() {
-        // TODO: cuando el Integrante 1 termine su formulario, abrirlo aquí:
-        // new GestionEmpleadosFrame().setVisible(true);
-        JOptionPane.showMessageDialog(this,
-                "El formulario de gestión de empleados (Módulo 1) aún no está integrado.",
-                "Información", JOptionPane.INFORMATION_MESSAGE);
+private void abrirGestionEmpleados() {
+    new FrmGestionEmpleados().setVisible(true);
     }
 
     private void salir() {
