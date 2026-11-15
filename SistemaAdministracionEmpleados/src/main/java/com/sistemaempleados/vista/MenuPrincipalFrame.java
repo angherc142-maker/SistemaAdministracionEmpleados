@@ -22,7 +22,7 @@ public class MenuPrincipalFrame extends JFrame {
 
     public MenuPrincipalFrame(String usuario) {
         setTitle("Sistema de Administración de Empleados");
-        setSize(420, 450);
+        setSize(420, 380);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setLocationRelativeTo(null);
         setResizable(false);
@@ -41,17 +41,15 @@ public class MenuPrincipalFrame extends JFrame {
         titulo.setFont(new Font("Segoe UI", Font.BOLD, 16));
         panel.add(titulo, BorderLayout.NORTH);
 
-        JPanel botones = new JPanel(new GridLayout(5, 1, 10, 10));
+        JPanel botones = new JPanel(new GridLayout(4, 1, 10, 10));
         JButton btnEmpleados = new JButton("Gestión de empleados");
         JButton btnConsulta = new JButton("Consultar remuneraciones");
         JButton btnReportes = new JButton("Reportes");
-        JButton btnCerrarSesion = new JButton("Cerrar sesión");
         JButton btnSalir = new JButton("Salir");
 
         botones.add(btnEmpleados);
         botones.add(btnConsulta);
         botones.add(btnReportes);
-        botones.add(btnCerrarSesion);
         botones.add(btnSalir);
         panel.add(botones, BorderLayout.CENTER);
 
@@ -60,28 +58,11 @@ public class MenuPrincipalFrame extends JFrame {
         btnEmpleados.addActionListener(e -> abrirGestionEmpleados());
         btnConsulta.addActionListener(e -> new ConsultaRemuneracionesFrame().setVisible(true));
         btnReportes.addActionListener(e -> new ReportesFrame().setVisible(true));
-        btnCerrarSesion.addActionListener(e -> cerrarSesion());
         btnSalir.addActionListener(e -> salir());
     }
 
 private void abrirGestionEmpleados() {
     new FrmGestionEmpleados().setVisible(true);
-    }
-
-    private void cerrarSesion() {
-        int opcion = JOptionPane.showConfirmDialog(this,
-                "¿Desea cerrar la sesión?",
-                "Cerrar sesión", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-        if (opcion == JOptionPane.YES_OPTION) {
-            LoginFrame login = new LoginFrame();
-            login.setVisible(true);
-            // Cierra el menú y todas las ventanas abiertas para proteger el sistema
-            for (java.awt.Window w : java.awt.Window.getWindows()) {
-                if (w != login && w.isDisplayable()) {
-                    w.dispose();
-                }
-            }
-        }
     }
 
     private void salir() {
