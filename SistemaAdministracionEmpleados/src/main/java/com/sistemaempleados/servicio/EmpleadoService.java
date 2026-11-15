@@ -4,7 +4,6 @@ import com.sistemaempleados.modelo.Empleado;
 import com.sistemaempleados.modelo.EmpleadoAdministrativo;
 import com.sistemaempleados.modelo.EmpleadoPorComision;
 import com.sistemaempleados.modelo.EmpleadoPorHora;
-import com.sistemaempleados.modelo.EmpleadoPrueba;
 import com.sistemaempleados.mysql.modelo.RegistroRemuneracion;
 import com.sistemaempleados.mysql.persistencia.EsquemaBD;
 import com.sistemaempleados.mysql.persistencia.MySqlConexion;
@@ -20,9 +19,11 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Servicio de gestión de empleados. Valida los datos, los guarda en MySQL
@@ -41,11 +42,21 @@ public class EmpleadoService {
     public static final String TIPO_POR_HORA = "Por hora";
     public static final String TIPO_POR_COMISION = "Por comisión";
 
+    /** Formato del documento: 8 dígitos, guion y dígito verificador (00000000-0). */
+    private static final String FORMATO_DOCUMENTO = "\\d{8}-\\d";
+
+    /** Formato del código: 2 letras y 3 números (por ejemplo AB123). */
+    private static final String FORMATO_CODIGO = "[A-Za-z]{2}\\d{3}";
+    
+        /** Nombre: solo letras (con tildes y ñ) separadas por espacios. */
+    private static final String FORMATO_NOMBRE = "\\p{L}+( \\p{L}+)*";
+
     private static final String COLUMNAS =
             "codigo, nombre, cedula, cargo, fecha_ingreso, activo, tipo, "
             + "salario_base, tarifa_hora, horas_trabajadas, monto_ventas, porcentaje_comision";
 
-    private static boolean esquemaListo = false;
+    // Bases de datos cuyo esquema ya fue preparado (puede cambiar en las pruebas)
+    private static final Set<String> ESQUEMAS_LISTOS = new HashSet<>();
 
     public EmpleadoService() {
         prepararEsquema();
@@ -56,7 +67,7 @@ public class EmpleadoService {
 
         validarCampos(empleado);
 
-        if (buscar(empleado.getCodigo()) != null) {
+        if (existeCodigo(empleado.getCodigo())) {
             throw new IllegalArgumentException(
                 "El código del empleado ya existe."
             );
@@ -86,24 +97,51 @@ public class EmpleadoService {
         }
     }
 
-    // Buscar por código
+    // Buscar por código (no distingue mayúsculas)
     public Empleado buscar(String codigo) {
 
         if (codigo == null || codigo.isBlank()) {
             return null;
         }
 
-        String sql = "SELECT " + COLUMNAS + " FROM empleados WHERE codigo = ?";
+        return buscarUno("codigo = ? COLLATE utf8mb4_unicode_ci", codigo.trim());
+    }
+
+    // Buscar por documento (formato 00000000-0)
+    public Empleado buscarPorDocumento(String documento) {
+
+        if (documento == null || documento.isBlank()) {
+            return null;
+        }
+
+        return buscarUno("cedula = ?", documento.trim());
+    }
+
+    // Buscar por nombre (coincidencia parcial, sin distinguir mayúsculas)
+    public List<Empleado> buscarPorNombre(String nombre) {
+
+        List<Empleado> lista = new ArrayList<>();
+
+        if (nombre == null || nombre.isBlank()) {
+            return lista;
+        }
+
+        String sql = "SELECT " + COLUMNAS + " FROM empleados "
+                + "WHERE nombre LIKE ? AND codigo IS NOT NULL ORDER BY nombre";
 
         try (Connection c = MySqlConexion.getConexion();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, codigo.trim());
+            ps.setString(1, "%" + nombre.trim() + "%");
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? aEmpleado(rs) : null;
+                while (rs.next()) {
+                    agregarSiEsValido(lista, rs);
+                }
             }
         } catch (SQLException ex) {
-            throw errorBD("buscar el empleado", ex);
+            throw errorBD("buscar por nombre", ex);
         }
+
+        return lista;
     }
 
     // Consultar todos los empleados
@@ -118,31 +156,39 @@ public class EmpleadoService {
              Statement st = c.createStatement();
              ResultSet rs = st.executeQuery(sql)) {
             while (rs.next()) {
-                lista.add(aEmpleado(rs));
+                agregarSiEsValido(lista, rs);
             }
         } catch (SQLException ex) {
-            // Se devuelve la lista vacía para que la ventana pueda abrirse.
-            System.err.println("No se pudo listar los empleados: " + ex.getMessage());
+            throw errorBD("listar los empleados", ex);
         }
 
         return lista;
     }
 
-    // Modificar empleado
+    // Modificar empleado (el tipo no puede cambiarse una vez registrado)
     public void modificar(Empleado empleado) {
 
         validarCampos(empleado);
 
-        if (buscar(empleado.getCodigo()) == null) {
+        Empleado actual = buscar(empleado.getCodigo());
+
+        if (actual == null) {
             throw new IllegalArgumentException(
                 "El empleado no existe."
+            );
+        }
+
+        if (!nombreTipo(actual).equals(nombreTipo(empleado))) {
+            throw new IllegalArgumentException(
+                "No se puede cambiar el tipo de un empleado ya registrado ("
+                + nombreTipo(actual) + ")."
             );
         }
 
         String sql = "UPDATE empleados SET nombre = ?, cedula = ?, cargo = ?, "
                 + "fecha_ingreso = ?, tipo = ?, salario_base = ?, tarifa_hora = ?, "
                 + "horas_trabajadas = ?, monto_ventas = ?, porcentaje_comision = ? "
-                + "WHERE codigo = ?";
+                + "WHERE codigo = ? COLLATE utf8mb4_unicode_ci";
 
         try (Connection c = MySqlConexion.getConexion();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -179,7 +225,8 @@ public class EmpleadoService {
             );
         }
 
-        String sql = "UPDATE empleados SET activo = 0 WHERE codigo = ?";
+        String sql = "UPDATE empleados SET activo = 0 "
+                + "WHERE codigo = ? COLLATE utf8mb4_unicode_ci";
 
         try (Connection c = MySqlConexion.getConexion();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -192,7 +239,9 @@ public class EmpleadoService {
 
     /**
      * Calcula la remuneración del empleado según su tipo y la registra en el
-     * historial (tablas remuneraciones y remuneracion_valores).
+     * historial (tablas remuneraciones y remuneracion_valores). Un empleado
+     * tiene a lo sumo un cálculo por período: los cálculos guardados no se
+     * sobrescriben.
      *
      * @param codigo  código del empleado
      * @param periodo período con formato AAAA-MM, por ejemplo 2026-11
@@ -232,16 +281,25 @@ public class EmpleadoService {
             valores.put("porcentajeComision", c.getPorcentajeComision());
         } else {
             throw new IllegalArgumentException(
-                "El empleado no tiene tipo definido. Modifíquelo y elija su tipo."
+                "Datos incompletos: el empleado no tiene tipo definido."
             );
         }
 
         double importe = empleado.calcularRemuneracion();
 
         try {
-            new RemuneracionDAO().guardar(
-                new RegistroRemuneracion(obtenerId(codigo), periodo, valores, importe)
-            );
+            RemuneracionDAO dao = new RemuneracionDAO();
+            int id = obtenerId(codigo);
+
+            if (dao.buscarPorEmpleadoYPeriodo(id, periodo) != null) {
+                throw new IllegalArgumentException(
+                    "Ya existe un cálculo de este empleado para el período "
+                    + periodo + "."
+                );
+            }
+
+            dao.guardar(new RegistroRemuneracion(id, periodo, valores, importe));
+
         } catch (PersistenciaException ex) {
             throw new IllegalArgumentException(
                 "No se pudo registrar la remuneración: " + ex.getMessage()
@@ -249,6 +307,21 @@ public class EmpleadoService {
         }
 
         return importe;
+    }
+
+    // Nombre del tipo de un empleado (o "Sin definir")
+    public static String nombreTipo(Empleado empleado) {
+
+        if (empleado instanceof EmpleadoAdministrativo) {
+            return TIPO_ADMINISTRATIVO;
+        }
+        if (empleado instanceof EmpleadoPorHora) {
+            return TIPO_POR_HORA;
+        }
+        if (empleado instanceof EmpleadoPorComision) {
+            return TIPO_POR_COMISION;
+        }
+        return "Sin definir";
     }
 
     // Validar información
@@ -260,6 +333,15 @@ public class EmpleadoService {
             );
         }
 
+        if (!(empleado instanceof EmpleadoAdministrativo
+                || empleado instanceof EmpleadoPorHora
+                || empleado instanceof EmpleadoPorComision)) {
+            throw new IllegalArgumentException(
+                "Debe seleccionar un tipo de empleado válido "
+                + "(administrativo, por hora o por comisión)."
+            );
+        }
+
         if (empleado.getCodigo() == null ||
             empleado.getCodigo().isBlank()) {
             throw new IllegalArgumentException(
@@ -267,10 +349,25 @@ public class EmpleadoService {
             );
         }
 
+        if (empleado.getCodigo().trim().length() > 30) {
+            throw new IllegalArgumentException(
+                "El código no puede superar 30 caracteres."
+            );
+        }
+        if (!empleado.getCodigo().trim().matches(FORMATO_CODIGO)) {
+            throw new IllegalArgumentException(
+                "El código debe tener 2 letras y 3 números (por ejemplo AB123)."
+            );
+        }
         if (empleado.getNombre() == null ||
             empleado.getNombre().isBlank()) {
             throw new IllegalArgumentException(
                 "El nombre es obligatorio."
+            );
+        }
+        if (!empleado.getNombre().trim().matches(FORMATO_NOMBRE)) {
+            throw new IllegalArgumentException(
+                "El nombre solo puede contener letras y espacios."
             );
         }
 
@@ -281,11 +378,10 @@ public class EmpleadoService {
             );
         }
 
-        // Formato del documento: ajústelo si el equipo define otro formato.
-        if (!empleado.getDocumento().trim().matches("[A-Za-z0-9-]{5,20}")) {
+        if (!empleado.getDocumento().trim().matches(FORMATO_DOCUMENTO)) {
             throw new IllegalArgumentException(
-                "El documento debe tener de 5 a 20 caracteres "
-                + "(letras, números o guiones)."
+                "El documento debe tener el formato 00000000-0 "
+                + "(8 dígitos, guion y dígito verificador)."
             );
         }
 
@@ -309,6 +405,44 @@ public class EmpleadoService {
         }
     }
 
+    private boolean existeCodigo(String codigo) {
+        String sql = "SELECT 1 FROM empleados WHERE codigo = ? COLLATE utf8mb4_unicode_ci";
+        try (Connection c = MySqlConexion.getConexion();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, codigo.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException ex) {
+            throw errorBD("verificar el código", ex);
+        }
+    }
+
+    private Empleado buscarUno(String condicion, String valor) {
+
+        String sql = "SELECT " + COLUMNAS + " FROM empleados WHERE " + condicion;
+
+        try (Connection c = MySqlConexion.getConexion();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, valor);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? aEmpleado(rs) : null;
+            }
+        } catch (SQLException ex) {
+            throw errorBD("buscar el empleado", ex);
+        }
+    }
+
+    // Las filas con datos incompletos o tipo indefinido no se listan
+    private void agregarSiEsValido(List<Empleado> lista, ResultSet rs) throws SQLException {
+        try {
+            lista.add(aEmpleado(rs));
+        } catch (IllegalArgumentException ex) {
+            System.err.println("Se omitió un empleado con datos incompletos: "
+                    + ex.getMessage());
+        }
+    }
+
     // Convierte una fila de la tabla en el tipo de empleado que corresponde
     private Empleado aEmpleado(ResultSet rs) throws SQLException {
 
@@ -317,15 +451,24 @@ public class EmpleadoService {
         String documento = rs.getString("cedula");
         String cargo = rs.getString("cargo");
         Date f = rs.getDate("fecha_ingreso");
-        LocalDate fecha = f == null ? LocalDate.now() : f.toLocalDate();
         String tipo = rs.getString("tipo");
+
+        if (codigo == null || f == null) {
+            throw new IllegalArgumentException(
+                "Datos incompletos del empleado " + documento + "."
+            );
+        }
+
+        LocalDate fecha = f.toLocalDate();
+        double salario = rs.getDouble("salario_base");
 
         Empleado e;
 
         try {
-            if (TIPO_ADMINISTRATIVO.equals(tipo)) {
+            // Filas del prototipo anterior: sin tipo pero con salario base
+            if (TIPO_ADMINISTRATIVO.equals(tipo) || (tipo == null && salario > 0)) {
                 e = new EmpleadoAdministrativo(codigo, nombre, documento, cargo, fecha,
-                        rs.getDouble("salario_base"));
+                        salario);
             } else if (TIPO_POR_HORA.equals(tipo)) {
                 e = new EmpleadoPorHora(codigo, nombre, documento, cargo, fecha,
                         rs.getDouble("tarifa_hora"), rs.getDouble("horas_trabajadas"));
@@ -333,11 +476,15 @@ public class EmpleadoService {
                 e = new EmpleadoPorComision(codigo, nombre, documento, cargo, fecha,
                         rs.getDouble("monto_ventas"), rs.getDouble("porcentaje_comision"));
             } else {
-                e = new EmpleadoPrueba(codigo, nombre, documento, cargo, fecha);
+                throw new IllegalArgumentException(
+                    "El empleado " + codigo + " no tiene tipo definido."
+                );
             }
         } catch (IllegalArgumentException ex) {
-            // Datos guardados que no cumplen las reglas del tipo: se muestran sin tipo.
-            e = new EmpleadoPrueba(codigo, nombre, documento, cargo, fecha);
+            throw new IllegalArgumentException(
+                "Datos incompletos o inválidos del empleado " + codigo
+                + ": " + ex.getMessage()
+            );
         }
 
         e.setActivo(rs.getBoolean("activo"));
@@ -348,28 +495,25 @@ public class EmpleadoService {
     private static void asignarTipo(PreparedStatement ps, Empleado e, int i)
             throws SQLException {
 
-        String tipo = null;
-        double salario = 0;
+        String tipo = nombreTipo(e);
+        Double salario = null;
         Double tarifa = null;
         Double horas = null;
         Double ventas = null;
         Double porcentaje = null;
 
         if (e instanceof EmpleadoAdministrativo a) {
-            tipo = TIPO_ADMINISTRATIVO;
             salario = a.getSalarioBase();
         } else if (e instanceof EmpleadoPorHora h) {
-            tipo = TIPO_POR_HORA;
             tarifa = h.getTarifaPorHora();
             horas = h.getHorasTrabajadas();
         } else if (e instanceof EmpleadoPorComision c) {
-            tipo = TIPO_POR_COMISION;
             ventas = c.getMontoVentas();
             porcentaje = c.getPorcentajeComision();
         }
 
         ps.setString(i, tipo);
-        ps.setDouble(i + 1, salario);
+        asignarDecimal(ps, i + 1, salario);
         asignarDecimal(ps, i + 2, tarifa);
         asignarDecimal(ps, i + 3, horas);
         asignarDecimal(ps, i + 4, ventas);
@@ -386,7 +530,7 @@ public class EmpleadoService {
     }
 
     private int obtenerId(String codigo) {
-        String sql = "SELECT id FROM empleados WHERE codigo = ?";
+        String sql = "SELECT id FROM empleados WHERE codigo = ? COLLATE utf8mb4_unicode_ci";
         try (Connection c = MySqlConexion.getConexion();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, codigo.trim());
@@ -408,10 +552,12 @@ public class EmpleadoService {
         );
     }
 
-    // Crea la base y las tablas si faltan, y agrega las columnas nuevas una sola vez
+    // Crea la base y las tablas si faltan y agrega las columnas nuevas (una vez por base)
     public static synchronized void prepararEsquema() {
 
-        if (esquemaListo) {
+        String bd = MySqlConexion.getBaseDatos();
+
+        if (ESQUEMAS_LISTOS.contains(bd)) {
             return;
         }
 
@@ -423,7 +569,8 @@ public class EmpleadoService {
 
                 if (!existeColumna(c, "codigo")) {
                     st.execute("ALTER TABLE empleados "
-                            + "ADD COLUMN codigo VARCHAR(30) NULL, "
+                            + "ADD COLUMN codigo VARCHAR(30) "
+                            + "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL, "
                             + "ADD UNIQUE KEY uq_empleados_codigo (codigo)");
                 }
                 agregarColumna(c, st, "fecha_ingreso", "DATE NULL");
@@ -433,9 +580,26 @@ public class EmpleadoService {
                 agregarColumna(c, st, "horas_trabajadas", "DECIMAL(8,2) NULL");
                 agregarColumna(c, st, "monto_ventas", "DECIMAL(12,2) NULL");
                 agregarColumna(c, st, "porcentaje_comision", "DECIMAL(5,2) NULL");
+
+                // El salario base solo aplica al tipo administrativo
+                st.execute("ALTER TABLE empleados MODIFY salario_base DECIMAL(12,2) NULL");
+                st.executeUpdate("UPDATE empleados SET salario_base = NULL "
+                        + "WHERE tipo IS NOT NULL AND tipo <> '" + TIPO_ADMINISTRATIVO + "'");
+
+                // Las mismas validaciones de las clases, repetidas en la base
+                agregarCheck(c, st, "chk_salario_base",
+                        "salario_base IS NULL OR salario_base > 0");
+                agregarCheck(c, st, "chk_tarifa_hora",
+                        "tarifa_hora IS NULL OR tarifa_hora > 0");
+                agregarCheck(c, st, "chk_horas_trabajadas",
+                        "horas_trabajadas IS NULL OR (horas_trabajadas > 0 AND horas_trabajadas <= 744)");
+                agregarCheck(c, st, "chk_monto_ventas",
+                        "monto_ventas IS NULL OR monto_ventas >= 0");
+                agregarCheck(c, st, "chk_porcentaje_comision",
+                        "porcentaje_comision IS NULL OR (porcentaje_comision > 0 AND porcentaje_comision <= 100)");
             }
 
-            esquemaListo = true;
+            ESQUEMAS_LISTOS.add(bd);
 
         } catch (SQLException | PersistenciaException ex) {
             System.err.println("No se pudo preparar la tabla empleados: " + ex.getMessage());
@@ -446,6 +610,32 @@ public class EmpleadoService {
             String columna, String definicion) throws SQLException {
         if (!existeColumna(c, columna)) {
             st.execute("ALTER TABLE empleados ADD COLUMN " + columna + " " + definicion);
+        }
+    }
+
+    // Si algún dato antiguo no cumple la regla, se omite la restricción sin detener la aplicación
+    private static void agregarCheck(Connection c, Statement st,
+            String nombre, String condicion) {
+        try {
+            if (!existeRestriccion(c, nombre)) {
+                st.execute("ALTER TABLE empleados ADD CONSTRAINT " + nombre
+                        + " CHECK (" + condicion + ")");
+            }
+        } catch (SQLException ex) {
+            System.err.println("No se pudo crear la restricción " + nombre
+                    + ": " + ex.getMessage());
+        }
+    }
+
+    private static boolean existeRestriccion(Connection c, String nombre) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'empleados' "
+                + "AND CONSTRAINT_NAME = ?";
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, nombre);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
         }
     }
 

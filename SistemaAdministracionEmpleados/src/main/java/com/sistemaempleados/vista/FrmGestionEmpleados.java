@@ -35,7 +35,10 @@ import com.sistemaempleados.servicio.EmpleadoService;
  */
 public class FrmGestionEmpleados extends JFrame {
 
+    private static final String SIN_TIPO = "Seleccione...";
+
     private static final String[] TIPOS = {
+        SIN_TIPO,
         EmpleadoService.TIPO_ADMINISTRATIVO,
         EmpleadoService.TIPO_POR_HORA,
         EmpleadoService.TIPO_POR_COMISION
@@ -62,6 +65,8 @@ public class FrmGestionEmpleados extends JFrame {
     // Búsqueda y filtro
     private JTextField txtFiltro;
     private JComboBox<String> cmbFiltroTipo;
+
+    private JLabel lblEstadoTabla;
 
     private JTable tablaEmpleados;
     private DefaultTableModel modeloTabla;
@@ -178,6 +183,9 @@ public class FrmGestionEmpleados extends JFrame {
         panelTabla.add(panelFiltro, BorderLayout.NORTH);
         panelTabla.add(scroll, BorderLayout.CENTER);
 
+        lblEstadoTabla = new JLabel(" ");
+        panelTabla.add(lblEstadoTabla, BorderLayout.SOUTH);
+
         JPanel panelCentro = new JPanel(new BorderLayout(10, 10));
         panelCentro.add(panelSuperior, BorderLayout.NORTH);
         panelCentro.add(panelTabla, BorderLayout.CENTER);
@@ -224,8 +232,9 @@ public class FrmGestionEmpleados extends JFrame {
         agregarCampo("Tipo de empleado:", cmbTipo);
 
         switch (cmbTipo.getSelectedIndex()) {
-            case 0 -> agregarCampo("Salario base mensual:", txtSalario);
-            case 1 -> {
+            case 0 -> { }
+            case 1 -> agregarCampo("Salario base mensual:", txtSalario);
+            case 2 -> {
                 agregarCampo("Tarifa por hora:", txtTarifa);
                 agregarCampo("Horas trabajadas del período:", txtHoras);
             }
@@ -269,12 +278,47 @@ public class FrmGestionEmpleados extends JFrame {
         }
     }
 
+    // Busca por código; si está vacío, por documento; y si también, por nombre
     private void buscar() {
 
         String codigo = txtCodigo.getText().trim();
+        String documento = txtDocumento.getText().trim();
+        String nombre = txtNombre.getText().trim();
 
         try {
-            Empleado empleado = servicio.buscar(codigo);
+            Empleado empleado = null;
+
+            if (!codigo.isEmpty()) {
+                empleado = servicio.buscar(codigo);
+
+            } else if (!documento.isEmpty()) {
+                empleado = servicio.buscarPorDocumento(documento);
+
+            } else if (!nombre.isEmpty()) {
+                List<Empleado> encontrados = servicio.buscarPorNombre(nombre);
+
+                if (encontrados.size() > 1) {
+                    txtFiltro.setText(nombre);
+                    cmbFiltroTipo.setSelectedIndex(0);
+                    actualizarTabla();
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Se encontraron " + encontrados.size()
+                            + " empleados. Seleccione uno de la tabla."
+                    );
+                    return;
+                }
+
+                if (!encontrados.isEmpty()) {
+                    empleado = encontrados.get(0);
+                }
+
+            } else {
+                JOptionPane.showMessageDialog(
+                    this, "Ingrese el código, el documento o el nombre a buscar."
+                );
+                return;
+            }
 
             if (empleado == null) {
                 JOptionPane.showMessageDialog(
@@ -440,11 +484,15 @@ public class FrmGestionEmpleados extends JFrame {
 
         switch (cmbTipo.getSelectedIndex()) {
             case 0:
+                throw new IllegalArgumentException(
+                    "Debe seleccionar el tipo de empleado."
+                );
+            case 1:
                 return new EmpleadoAdministrativo(
                     codigo, nombre, documento, cargo, fecha,
                     leerNumero(txtSalario, "El salario base")
                 );
-            case 1:
+            case 2:
                 return new EmpleadoPorHora(
                     codigo, nombre, documento, cargo, fecha,
                     leerNumero(txtTarifa, "La tarifa por hora"),
@@ -476,17 +524,7 @@ public class FrmGestionEmpleados extends JFrame {
     }
 
     private String nombreTipo(Empleado empleado) {
-
-        if (empleado instanceof EmpleadoAdministrativo) {
-            return EmpleadoService.TIPO_ADMINISTRATIVO;
-        }
-        if (empleado instanceof EmpleadoPorHora) {
-            return EmpleadoService.TIPO_POR_HORA;
-        }
-        if (empleado instanceof EmpleadoPorComision) {
-            return EmpleadoService.TIPO_POR_COMISION;
-        }
-        return "Sin definir";
+        return EmpleadoService.nombreTipo(empleado);
     }
 
     private void actualizarTabla() {
@@ -496,7 +534,20 @@ public class FrmGestionEmpleados extends JFrame {
         String filtro = txtFiltro.getText().trim().toLowerCase();
         String tipoFiltro = (String) cmbFiltroTipo.getSelectedItem();
 
-        List<Empleado> empleados = servicio.listar();
+        List<Empleado> empleados;
+
+        try {
+            empleados = servicio.listar();
+
+        } catch (IllegalArgumentException ex) {
+            lblEstadoTabla.setText("Error al consultar la base de datos.");
+            JOptionPane.showMessageDialog(
+                this, ex.getMessage(),
+                "Error de conexión",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
 
         for (Empleado empleado : empleados) {
 
@@ -528,6 +579,18 @@ public class FrmGestionEmpleados extends JFrame {
                 remuneracion
             });
         }
+
+        if (modeloTabla.getRowCount() == 0) {
+            lblEstadoTabla.setText(
+                empleados.isEmpty()
+                    ? "No hay empleados registrados."
+                    : "Sin resultados para la búsqueda."
+            );
+        } else {
+            lblEstadoTabla.setText(
+                "Empleados mostrados: " + modeloTabla.getRowCount()
+            );
+        }
     }
 
     private void cargarDatos(Empleado empleado) {
@@ -547,16 +610,16 @@ public class FrmGestionEmpleados extends JFrame {
         txtPorcentaje.setText("");
 
         if (empleado instanceof EmpleadoAdministrativo a) {
-            cmbTipo.setSelectedIndex(0);
+            cmbTipo.setSelectedIndex(1);
             txtSalario.setText(String.valueOf(a.getSalarioBase()));
 
         } else if (empleado instanceof EmpleadoPorHora h) {
-            cmbTipo.setSelectedIndex(1);
+            cmbTipo.setSelectedIndex(2);
             txtTarifa.setText(String.valueOf(h.getTarifaPorHora()));
             txtHoras.setText(String.valueOf(h.getHorasTrabajadas()));
 
         } else if (empleado instanceof EmpleadoPorComision c) {
-            cmbTipo.setSelectedIndex(2);
+            cmbTipo.setSelectedIndex(3);
             txtVentas.setText(String.valueOf(c.getMontoVentas()));
             txtPorcentaje.setText(String.valueOf(c.getPorcentajeComision()));
         }
@@ -592,6 +655,7 @@ public class FrmGestionEmpleados extends JFrame {
         txtHoras.setText("");
         txtVentas.setText("");
         txtPorcentaje.setText("");
+        cmbTipo.setSelectedIndex(0);
 
         tablaEmpleados.clearSelection();
         txtCodigo.requestFocus();

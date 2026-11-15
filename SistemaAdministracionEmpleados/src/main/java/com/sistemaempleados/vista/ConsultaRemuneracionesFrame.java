@@ -18,7 +18,7 @@ import javax.swing.table.DefaultTableModel;
 
 /**
  * Ventana para consultar el historial de remuneraciones,
- * con búsqueda por cédula o nombre.
+ * con búsqueda por código, documento, nombre o período (AAAA-MM).
  *
  * @author Javier
  */
@@ -41,13 +41,13 @@ public class ConsultaRemuneracionesFrame extends JFrame {
         txtBuscar = new JTextField(20);
         JButton btnBuscar = new JButton("Buscar");
         JButton btnLimpiar = new JButton("Mostrar todo");
-        arriba.add(new JLabel("Cédula o nombre:"));
+        arriba.add(new JLabel("Código, documento, nombre o período:"));
         arriba.add(txtBuscar);
         arriba.add(btnBuscar);
         arriba.add(btnLimpiar);
         panel.add(arriba, BorderLayout.NORTH);
 
-        String[] columnas = {"Cédula", "Empleado", "Tipo", "Período", "Valores utilizados", "Importe"};
+        String[] columnas = {"Código", "Documento", "Empleado", "Tipo", "Período", "Valores utilizados", "Importe"};
         modelo = new DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int fila, int columna) {
@@ -76,7 +76,7 @@ public class ConsultaRemuneracionesFrame extends JFrame {
     private void buscar() {
         String texto = txtBuscar.getText().trim();
         if (texto.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Escriba una cédula o nombre para buscar.",
+            JOptionPane.showMessageDialog(this, "Escriba un código, documento, nombre o período (AAAA-MM) para buscar.",
                     "Campo vacío", JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -104,10 +104,12 @@ public class ConsultaRemuneracionesFrame extends JFrame {
 
         for (RepositorioVista.RemuneracionVista r : lista) {
             boolean coincide = filtro.isEmpty()
+                    || r.codigo().equalsIgnoreCase(filtro)
                     || r.cedula().equalsIgnoreCase(filtro)
+                    || r.periodo().equals(filtro)
                     || r.nombre().toLowerCase().contains(filtro.toLowerCase());
             if (coincide) {
-                modelo.addRow(new Object[]{r.cedula(), r.nombre(), r.tipo(), r.periodo(),
+                modelo.addRow(new Object[]{r.codigo(), r.cedula(), r.nombre(), r.tipo(), r.periodo(),
                         r.detalle(), String.format("$%,.2f", r.importe())});
                 total += r.importe();
             }

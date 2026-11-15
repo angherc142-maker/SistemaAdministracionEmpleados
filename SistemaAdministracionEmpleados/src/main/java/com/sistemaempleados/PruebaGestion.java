@@ -4,79 +4,86 @@
  */
 package com.sistemaempleados;
 
+import com.sistemaempleados.modelo.Empleado;
+import com.sistemaempleados.modelo.EmpleadoAdministrativo;
+import com.sistemaempleados.modelo.EmpleadoPorComision;
+import com.sistemaempleados.modelo.EmpleadoPorHora;
+import com.sistemaempleados.servicio.EmpleadoService;
+import java.time.LocalDate;
+import java.time.YearMonth;
+
 /**
+ * Prueba manual por consola (requiere MySQL activo): registra un empleado de
+ * cada tipo, prueba duplicados y calcula la remuneración de cada uno.
+ * Los empleados quedan en la base de datos configurada en MySqlConexion.
  *
  * @author Hércules
  */
-import com.sistemaempleados.modelo.EmpleadoPrueba;
-import com.sistemaempleados.servicio.EmpleadoService;
-import java.time.LocalDate;
-
 public class PruebaGestion {
 
     public static void main(String[] args) {
 
         EmpleadoService servicio = new EmpleadoService();
+        String periodo = YearMonth.now().toString();
 
         System.out.println("================================");
         System.out.println(" SISTEMA DE GESTION DE EMPLEADOS");
         System.out.println("================================");
 
-        // PRUEBA 1: Registrar empleado
-        System.out.println("\nPRUEBA 1: REGISTRAR EMPLEADO");
+        System.out.println("\nPRUEBA 1: REGISTRAR UN EMPLEADO DE CADA TIPO");
+        Empleado[] empleados = {
+            new EmpleadoAdministrativo("EMP001", "Carlos Perez", "12345678-9",
+                    "Contador", LocalDate.of(2024, 1, 15), 800),
+            new EmpleadoPorHora("EMP002", "Ana Lopez", "23456789-0",
+                    "Operaria", LocalDate.of(2024, 3, 1), 5.5, 160),
+            new EmpleadoPorComision("EMP003", "Luis Mena", "34567890-1",
+                    "Vendedor", LocalDate.of(2024, 6, 10), 10000, 5)
+        };
 
-        EmpleadoPrueba empleado1 = new EmpleadoPrueba(
-                "EMP001",
-                "Carlos Perez",
-                "12345678-9",
-                "Contador",
-                LocalDate.of(2026, 1, 15)
-        );
-
-        servicio.registrar(empleado1);
-
-        System.out.println("Empleado registrado correctamente.");
-
-        // PRUEBA 2: Buscar empleado
-        System.out.println("\nPRUEBA 2: BUSCAR EMPLEADO");
-
-        System.out.println(servicio.buscar("EMP001"));
-
-        // PRUEBA 3: Evitar código duplicado
-        System.out.println("\nPRUEBA 3: CODIGO DUPLICADO");
-
-        try {
-            EmpleadoPrueba duplicado = new EmpleadoPrueba(
-                    "EMP001",
-                    "Maria Lopez",
-                    "98765432-1",
-                    "Secretaria",
-                    LocalDate.of(2026, 2, 10)
-            );
-
-            servicio.registrar(duplicado);
-
-        } catch (IllegalArgumentException e) {
-            System.out.println("Validacion correcta: " + e.getMessage());
+        for (Empleado e : empleados) {
+            try {
+                servicio.registrar(e);
+                System.out.println("Registrado: " + e.getCodigo());
+            } catch (IllegalArgumentException ex) {
+                System.out.println("No registrado (" + e.getCodigo() + "): " + ex.getMessage());
+            }
         }
 
-        // PRUEBA 4: Modificar empleado
-        System.out.println("\nPRUEBA 4: MODIFICAR EMPLEADO");
+        System.out.println("\nPRUEBA 2: CODIGO DUPLICADO (sin distinguir mayusculas)");
+        try {
+            servicio.registrar(new EmpleadoAdministrativo("emp001", "Otro", "45678901-2",
+                    "Cargo", LocalDate.of(2024, 1, 1), 500));
+            System.out.println("ERROR: se permitio un codigo duplicado");
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Correcto: " + ex.getMessage());
+        }
 
-        empleado1.setCargo("Jefe de contabilidad");
-        servicio.modificar(empleado1);
+        System.out.println("\nPRUEBA 3: DOCUMENTO CON FORMATO INVALIDO");
+        try {
+            servicio.registrar(new EmpleadoAdministrativo("EMP004", "Otro", "ABC123",
+                    "Cargo", LocalDate.of(2024, 1, 1), 500));
+            System.out.println("ERROR: se permitio un documento invalido");
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Correcto: " + ex.getMessage());
+        }
 
-        System.out.println(servicio.buscar("EMP001"));
+        System.out.println("\nPRUEBA 4: CALCULAR REMUNERACIONES (" + periodo + ")");
+        for (Empleado e : empleados) {
+            try {
+                double importe = servicio.calcularYRegistrar(e.getCodigo(), periodo);
+                System.out.printf("%s: %.2f%n", e.getCodigo(), importe);
+            } catch (IllegalArgumentException ex) {
+                System.out.println(e.getCodigo() + ": " + ex.getMessage());
+            }
+        }
 
-        // PRUEBA 5: Inactivar empleado
-        System.out.println("\nPRUEBA 5: INACTIVAR EMPLEADO");
-
-        servicio.inactivar("EMP001");
-
-        System.out.println(servicio.buscar("EMP001"));
-
-        System.out.println("\n================================");
-        System.out.println(" FIN DE LAS PRUEBAS");
-        System.out.println("================================");
+        System.out.println("\nPRUEBA 5: INACTIVAR Y CALCULAR");
+        try {
+            servicio.inactivar("EMP001");
+            servicio.calcularYRegistrar("EMP001", "2000-01");
+            System.out.println("ERROR: se calculo un empleado inactivo");
+        } catch (IllegalArgumentException ex) {
+            System.out.println("Correcto: " + ex.getMessage());
+        }
     }
 }

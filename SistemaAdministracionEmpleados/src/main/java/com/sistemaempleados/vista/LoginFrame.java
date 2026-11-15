@@ -1,5 +1,7 @@
 package com.sistemaempleados.vista;
 
+import com.sistemaempleados.modelo.Usuario;
+import com.sistemaempleados.servicio.AutenticacionService;
 import java.awt.GridLayout;
 
 import javax.swing.BorderFactory;
@@ -13,7 +15,8 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 /**
- * Ventana de inicio de sesión.
+ * Ventana de inicio de sesión. Verifica las credenciales contra la tabla
+ * usuarios de MySQL (contraseña cifrada).
  *
  * @author Javier
  */
@@ -22,6 +25,7 @@ public class LoginFrame extends JFrame {
     private JTextField txtUsuario;
     private JPasswordField txtClave;
     private JButton btnIngresar;
+    private AutenticacionService autenticacion;
 
     public LoginFrame() {
         setTitle("Inicio de sesión");
@@ -61,14 +65,29 @@ public class LoginFrame extends JFrame {
             return;
         }
 
-        if (usuario.equals("admin") && clave.equals("1234")) {
-            new MenuPrincipalFrame(usuario).setVisible(true);
-            dispose();
-        } else {
+        try {
+            if (autenticacion == null) {
+                autenticacion = new AutenticacionService();
+            }
+
+            Usuario autenticado = autenticacion.autenticar(usuario, clave);
+
+            if (autenticado != null) {
+                new MenuPrincipalFrame(autenticado.getNombreUsuario()).setVisible(true);
+                dispose();
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Usuario o contraseña incorrectos.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                txtClave.setText("");
+            }
+
+        } catch (RuntimeException ex) {
+            autenticacion = null;
             JOptionPane.showMessageDialog(this,
-                    "Usuario o contraseña incorrectos.",
-                    "Error", JOptionPane.ERROR_MESSAGE);
-            txtClave.setText("");
+                    "No se pudo verificar el acceso (error de conexión con MySQL):\n"
+                    + ex.getMessage(),
+                    "Error de conexión", JOptionPane.ERROR_MESSAGE);
         }
     }
 
