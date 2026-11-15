@@ -1,8 +1,7 @@
 package com.sistemaempleados.vista;
 
-import com.sistemaempleados.mysql.persistencia.EsquemaBD;
 import com.sistemaempleados.mysql.persistencia.MySqlConexion;
-import com.sistemaempleados.mysql.persistencia.PersistenciaException;
+import com.sistemaempleados.servicio.EmpleadoService;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -28,11 +27,8 @@ public class RepositorioVista {
                                     String periodo, String detalle, double importe) {}
 
     private static Connection conectar() throws SQLException {
-        try {
-            EsquemaBD.inicializar();
-        } catch (PersistenciaException ex) {
-            throw new SQLException(ex.getMessage(), ex);
-        }
+        // Crea la base, las tablas y las columnas que falten antes de consultar.
+        EmpleadoService.prepararEsquema();
         return MySqlConexion.getConexion();
     }
 
@@ -46,12 +42,12 @@ public class RepositorioVista {
 
     public static List<RemuneracionVista> remuneraciones() throws SQLException {
         String sql = """
-            SELECT e.cedula, e.nombre, r.periodo, r.importe_calculado,
+            SELECT e.cedula, e.nombre, e.tipo, r.periodo, r.importe_calculado,
                    GROUP_CONCAT(CONCAT(v.concepto, ': ', v.monto) SEPARATOR ', ') AS detalle
             FROM remuneraciones r
             JOIN empleados e ON e.id = r.empleado_id
             LEFT JOIN remuneracion_valores v ON v.remuneracion_id = r.id
-            GROUP BY r.id, e.cedula, e.nombre, r.periodo, r.importe_calculado
+            GROUP BY r.id, e.cedula, e.nombre, e.tipo, r.periodo, r.importe_calculado
             ORDER BY r.periodo DESC, e.nombre
             """;
         List<RemuneracionVista> lista = new ArrayList<>();
@@ -60,9 +56,10 @@ public class RepositorioVista {
              ResultSet rs = st.executeQuery(sql)) {
             while (rs.next()) {
                 String detalle = rs.getString("detalle");
+                String tipo = rs.getString("tipo");
                 lista.add(new RemuneracionVista(
                         rs.getString("cedula"), rs.getString("nombre"),
-                        deducirTipo(detalle), rs.getString("periodo"),
+                        tipo != null ? tipo : deducirTipo(detalle), rs.getString("periodo"),
                         detalle == null ? "-" : detalle,
                         rs.getDouble("importe_calculado")));
             }
@@ -76,16 +73,17 @@ public class RepositorioVista {
             tipos.putIfAbsent(r.cedula(), r.tipo());
         }
         List<EmpleadoVista> lista = new ArrayList<>();
-        String sql = "SELECT cedula, nombre, cargo, salario_base FROM empleados ORDER BY nombre";
+        String sql = "SELECT cedula, nombre, cargo, salario_base, tipo FROM empleados ORDER BY nombre";
         try (Connection c = conectar();
              Statement st = c.createStatement();
              ResultSet rs = st.executeQuery(sql)) {
             while (rs.next()) {
                 String ced = rs.getString("cedula");
                 String cargo = rs.getString("cargo");
+                String tipo = rs.getString("tipo");
                 lista.add(new EmpleadoVista(ced, rs.getString("nombre"),
                         cargo == null ? "-" : cargo, rs.getDouble("salario_base"),
-                        tipos.getOrDefault(ced, "Sin definir")));
+                        tipo != null ? tipo : tipos.getOrDefault(ced, "Sin definir")));
             }
         }
         return lista;
