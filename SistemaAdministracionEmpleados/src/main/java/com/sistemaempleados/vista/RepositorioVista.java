@@ -22,7 +22,7 @@ public class RepositorioVista {
     private static final String URL =
             "jdbc:mysql://localhost:3306/remuneraciones_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
     private static final String USUARIO = System.getenv().getOrDefault("DB_USER", "root");
-    private static final String CLAVE = System.getenv().getOrDefault("DB_PASS", "MiNuevaClave123!");
+    private static final String CLAVE = System.getenv().getOrDefault("DB_PASS", "MiNuevaClave123");// Agregar la clave a usar (clave de referencia)
 
     public record EmpleadoVista(String cedula, String nombre, String cargo,
                                 double salarioBase, String tipo) {}
