@@ -11,7 +11,7 @@ public final class MySqlConexion {
             System.getenv().getOrDefault("MYSQL_USER", "root");
 
     private static final String CLAVE =
-            System.getenv().getOrDefault("MYSQL_PASSWORD", "CAMBIAR_CONTRA_AQUI"); //  <--- cambia la contra de tu local
+            System.getenv().getOrDefault("MYSQL_PASSWORD", "MiNuevaClave123!"); //  <--- cambia la contra de tu local
 
     private static final String OPCIONES =
             "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8";

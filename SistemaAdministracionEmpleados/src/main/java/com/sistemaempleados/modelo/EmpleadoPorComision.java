@@ -40,10 +40,10 @@ public class EmpleadoPorComision extends Empleado {
 
     public void setPorcentajeComision(double porcentajeComision) {
         if (!Double.isFinite(porcentajeComision)
-                || porcentajeComision <= 0
+                || porcentajeComision < 0
                 || porcentajeComision > 100) {
             throw new IllegalArgumentException(
-                    "La comisión debe estar entre 0 y 100.");
+                    "La comisión debe estar entre 0 y 100, inclusive.");
         }
 
         this.porcentajeComision = porcentajeComision;

@@ -23,9 +23,9 @@ public class EmpleadoAdministrativo extends Empleado {
 
     // Método Set con validación
     public void setSalarioBase(double salarioBase) {
-        if (!Double.isFinite(salarioBase) || salarioBase <= 0) {
+        if (!Double.isFinite(salarioBase) || salarioBase < 0) {
             throw new IllegalArgumentException(
-                    "El salario base debe ser mayor que cero.");
+                    "El salario base no puede ser negativo.");
         }
 
         this.salarioBase = salarioBase;

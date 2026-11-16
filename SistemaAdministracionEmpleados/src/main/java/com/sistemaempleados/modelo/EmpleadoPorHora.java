@@ -30,9 +30,9 @@ public class EmpleadoPorHora extends Empleado {
 
     // Métodos Set con validaciones
     public void setTarifaPorHora(double tarifaPorHora) {
-        if (!Double.isFinite(tarifaPorHora) || tarifaPorHora <= 0) {
+        if (!Double.isFinite(tarifaPorHora) || tarifaPorHora < 0) {
             throw new IllegalArgumentException(
-                    "La tarifa por hora debe ser mayor que cero.");
+                    "La tarifa por hora no puede ser negativa.");
         }
 
         this.tarifaPorHora = tarifaPorHora;
@@ -40,10 +40,10 @@ public class EmpleadoPorHora extends Empleado {
 
     public void setHorasTrabajadas(double horasTrabajadas) {
         if (!Double.isFinite(horasTrabajadas)
-                || horasTrabajadas <= 0
+                || horasTrabajadas < 0
                 || horasTrabajadas > 744) {
             throw new IllegalArgumentException(
-                    "Las horas deben estar entre 0 y 744.");
+                    "Las horas trabajadas deben estar entre 0 y 744.");
         }
 
         this.horasTrabajadas = horasTrabajadas;

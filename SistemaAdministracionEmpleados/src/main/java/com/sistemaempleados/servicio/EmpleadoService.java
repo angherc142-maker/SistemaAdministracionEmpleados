@@ -587,16 +587,16 @@ public class EmpleadoService {
                         + "WHERE tipo IS NOT NULL AND tipo <> '" + TIPO_ADMINISTRATIVO + "'");
 
                 // Las mismas validaciones de las clases, repetidas en la base
-                agregarCheck(c, st, "chk_salario_base",
-                        "salario_base IS NULL OR salario_base > 0");
-                agregarCheck(c, st, "chk_tarifa_hora",
-                        "tarifa_hora IS NULL OR tarifa_hora > 0");
-                agregarCheck(c, st, "chk_horas_trabajadas",
-                        "horas_trabajadas IS NULL OR (horas_trabajadas > 0 AND horas_trabajadas <= 744)");
-                agregarCheck(c, st, "chk_monto_ventas",
+                reemplazarCheck(c, st, "chk_salario_base",
+                        "salario_base IS NULL OR salario_base >= 0");
+                reemplazarCheck(c, st, "chk_tarifa_hora",
+                        "tarifa_hora IS NULL OR tarifa_hora >= 0");
+                reemplazarCheck(c, st, "chk_horas_trabajadas",
+                        "horas_trabajadas IS NULL OR (horas_trabajadas >= 0 AND horas_trabajadas <= 744)");
+                reemplazarCheck(c, st, "chk_monto_ventas",
                         "monto_ventas IS NULL OR monto_ventas >= 0");
-                agregarCheck(c, st, "chk_porcentaje_comision",
-                        "porcentaje_comision IS NULL OR (porcentaje_comision > 0 AND porcentaje_comision <= 100)");
+                reemplazarCheck(c, st, "chk_porcentaje_comision",
+                        "porcentaje_comision IS NULL OR (porcentaje_comision >= 0 AND porcentaje_comision <= 100)");
             }
 
             ESQUEMAS_LISTOS.add(bd);
@@ -613,18 +613,14 @@ public class EmpleadoService {
         }
     }
 
-    // Si algún dato antiguo no cumple la regla, se omite la restricción sin detener la aplicación
-    private static void agregarCheck(Connection c, Statement st,
-            String nombre, String condicion) {
-        try {
-            if (!existeRestriccion(c, nombre)) {
-                st.execute("ALTER TABLE empleados ADD CONSTRAINT " + nombre
-                        + " CHECK (" + condicion + ")");
-            }
-        } catch (SQLException ex) {
-            System.err.println("No se pudo crear la restricción " + nombre
-                    + ": " + ex.getMessage());
+    // Reemplaza las restricciones anteriores para que también permitan cero.
+    private static void reemplazarCheck(Connection c, Statement st,
+            String nombre, String condicion) throws SQLException {
+        if (existeRestriccion(c, nombre)) {
+            st.execute("ALTER TABLE empleados DROP CHECK " + nombre);
         }
+        st.execute("ALTER TABLE empleados ADD CONSTRAINT " + nombre
+                + " CHECK (" + condicion + ")");
     }
 
     private static boolean existeRestriccion(Connection c, String nombre) throws SQLException {
