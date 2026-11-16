@@ -1,53 +1,41 @@
 package com.sistemaempleados.mysql.persistencia;
+
 import com.sistemaempleados.mysql.modelo.RegistroRemuneracion;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/** Acceso al historial. Los registros se insertan y consultan, pero no se sobrescriben. */
 public class RemuneracionDAO {
+    public RemuneracionDAO() { EsquemaBD.inicializar(); }
 
-    public RemuneracionDAO() {
-        EsquemaBD.inicializar();
-    }
-
+    /** Inserta un cálculo nuevo; la clave única empleado/período evita duplicados. */
     public void guardar(RegistroRemuneracion r) {
-        String upsert = "INSERT INTO remuneraciones (empleado_id, periodo, importe_calculado, fecha_calculo) "
-                + "VALUES (?, ?, ?, ?) "
-                + "ON DUPLICATE KEY UPDATE importe_calculado = VALUES(importe_calculado), "
-                + "fecha_calculo = VALUES(fecha_calculo)";
+        String sql = "INSERT INTO remuneraciones (empleado_id, periodo, importe_calculado, fecha_calculo) VALUES (?, ?, ?, ?)";
         try (Connection c = MySqlConexion.getConexion()) {
             c.setAutoCommit(false);
             try {
-                try (PreparedStatement ps = c.prepareStatement(upsert)) {
+                int id;
+                try (PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                     ps.setInt(1, r.getEmpleadoId());
                     ps.setString(2, r.getPeriodo());
                     ps.setDouble(3, r.getImporteCalculado());
                     ps.setTimestamp(4, new Timestamp(r.getFechaCalculo().getTime()));
                     ps.executeUpdate();
-                }
-                int id;
-                try (PreparedStatement ps = c.prepareStatement(
-                        "SELECT id FROM remuneraciones WHERE empleado_id = ? AND periodo = ?")) {
-                    ps.setInt(1, r.getEmpleadoId());
-                    ps.setString(2, r.getPeriodo());
-                    try (ResultSet rs = ps.executeQuery()) {
-                        rs.next();
-                        id = rs.getInt(1);
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        if (!keys.next()) throw new SQLException("MySQL no devolvió el identificador del cálculo.");
+                        id = keys.getInt(1);
                     }
                 }
-                try (PreparedStatement ps = c.prepareStatement(
-                        "DELETE FROM remuneracion_valores WHERE remuneracion_id = ?")) {
-                    ps.setInt(1, id);
-                    ps.executeUpdate();
-                }
-                try (PreparedStatement ps = c.prepareStatement(
-                        "INSERT INTO remuneracion_valores (remuneracion_id, concepto, monto) VALUES (?, ?, ?)")) {
+                String detalleSql = "INSERT INTO remuneracion_valores (remuneracion_id, concepto, monto) VALUES (?, ?, ?)";
+                try (PreparedStatement ps = c.prepareStatement(detalleSql)) {
                     for (Map.Entry<String, Double> v : r.getValores().entrySet()) {
                         ps.setInt(1, id);
                         ps.setString(2, v.getKey());
@@ -58,12 +46,14 @@ public class RemuneracionDAO {
                 }
                 c.commit();
                 r.setId(id);
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException ex) {
                 c.rollback();
-                throw e;
+                throw ex;
+            } finally {
+                c.setAutoCommit(true);
             }
         } catch (SQLException ex) {
-            throw new PersistenciaException("No se pudo guardar la remuneración (¿existe el empleado?)", ex);
+            throw new PersistenciaException("No se pudo registrar el cálculo. Verifique que el empleado exista y que no haya otro cálculo para ese período.", ex);
         }
     }
 
@@ -79,29 +69,6 @@ public class RemuneracionDAO {
 
     public List<RegistroRemuneracion> listarPorPeriodo(String periodo) {
         return consultar("SELECT * FROM remuneraciones WHERE periodo = ? ORDER BY empleado_id", periodo);
-    }
-
-    public boolean actualizarImporte(int empleadoId, String periodo, double nuevoImporte) {
-        String sql = "UPDATE remuneraciones SET importe_calculado = ? WHERE empleado_id = ? AND periodo = ?";
-        try (Connection c = MySqlConexion.getConexion(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setDouble(1, nuevoImporte);
-            ps.setInt(2, empleadoId);
-            ps.setString(3, periodo);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException ex) {
-            throw new PersistenciaException("No se pudo actualizar el importe", ex);
-        }
-    }
-
-    public boolean eliminar(int empleadoId, String periodo) {
-        String sql = "DELETE FROM remuneraciones WHERE empleado_id = ? AND periodo = ?";
-        try (Connection c = MySqlConexion.getConexion(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setInt(1, empleadoId);
-            ps.setString(2, periodo);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException ex) {
-            throw new PersistenciaException("No se pudo eliminar la remuneración", ex);
-        }
     }
 
     private List<RegistroRemuneracion> consultar(String sql, Object... parametros) {
